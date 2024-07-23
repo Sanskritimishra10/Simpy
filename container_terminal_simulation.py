@@ -7,6 +7,8 @@ CONTAINERS_PER_VESSEL = 150
 CRANE_TIME_PER_CONTAINER = 3  # minutes
 TRUCK_TIME_PER_TRIP = 6  # minutes
 SIMULATION_TIME = 10000  # total simulation time in minutes
+
+# Container Terminal Simulation
 class ContainerTerminal:
     def __init__(self, env):
         self.env = env
@@ -24,27 +26,31 @@ class ContainerTerminal:
         arrival_time = self.env.now
         print(f'Vessel arrived at {arrival_time}')
 
-        with self.berths.request() as berth_request:
-            yield berth_request
-            berth_time = self.env.now
-            print(f'Vessel started berthing at {berth_time}')
+        berth_request = self.berths.request()
+        yield berth_request
+        berth_time = self.env.now
+        print(f'Vessel started berthing at {berth_time}')
 
-            # Unloading containers
-            with self.cranes.request() as crane_request:
-                yield crane_request
-                for _ in range(CONTAINERS_PER_VESSEL):
-                    yield self.env.timeout(CRANE_TIME_PER_CONTAINER)
-                    print(f'Crane moved container at {self.env.now}')
-                    
-                    with self.trucks.request() as truck_request:
-                        yield truck_request
-                        yield self.env.timeout(TRUCK_TIME_PER_TRIP)
-                        print(f'Truck moved container to yard at {self.env.now}')
+        # Unloading containers
+        crane_request = self.cranes.request()
+        yield crane_request
+        for _ in range(CONTAINERS_PER_VESSEL):
+            yield self.env.timeout(CRANE_TIME_PER_CONTAINER)
+            print(f'Crane moved container at {self.env.now}')
             
-            print(f'Vessel finished unloading and left at {self.env.now}')
+            truck_request = self.trucks.request()
+            yield truck_request
+            yield self.env.timeout(TRUCK_TIME_PER_TRIP)
+            print(f'Truck moved container to yard at {self.env.now}')
+            self.trucks.release(truck_request)
+        
+        self.cranes.release(crane_request)
+        self.berths.release(berth_request)
+        print(f'Vessel finished unloading and left at {self.env.now}')
 
 # Set up and run the simulation
 env = simpy.Environment()
 terminal = ContainerTerminal(env)
 env.process(terminal.vessel_arrival())
 env.run(until=SIMULATION_TIME)
+
